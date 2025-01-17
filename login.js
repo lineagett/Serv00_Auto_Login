@@ -18,8 +18,12 @@ async function delayTime(ms) {
     const { username, password, panelnum } = account;
 
     const browser = await puppeteer.launch({ 
-      headless: false,
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
+      headless: false,  // 非无头模式
+      args: [
+        '--no-sandbox',          // 禁用沙箱
+        '--disable-setuid-sandbox', // 禁用 setuid 沙箱
+        '--disable-software-rasterizer' // 禁用软件光栅化器
+      ]
     });
     const page = await browser.newPage();
 
@@ -28,6 +32,7 @@ async function delayTime(ms) {
     try {
       // 修改网址为新的登录页面
       await page.goto(url);
+      await page.waitForSelector('#id_username');  // 等待用户名输入框加载
 
       // 清空用户名输入框的原有值
       const usernameInput = await page.$('#id_username');
@@ -80,8 +85,3 @@ async function delayTime(ms) {
 
   console.log('所有账号登录完成！');
 })();
-
-// 自定义延时函数
-function delayTime(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
