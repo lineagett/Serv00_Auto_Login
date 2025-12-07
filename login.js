@@ -18,67 +18,76 @@ async function delayTime(ms) {
     const { username, password, panelnum } = account;
 
     const browser = await puppeteer.launch({ 
-      headless: false,  // 非无头模式
+      headless: false,  // 如果在服务器(如GitHub Actions)运行，通常需要改为 'new' 或 true
       args: [
-        '--no-sandbox',          // 禁用沙箱
-        '--disable-setuid-sandbox', // 禁用 setuid 沙箱
-        '--disable-software-rasterizer' // 禁用软件光栅化器
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-software-rasterizer'
       ]
     });
     const page = await browser.newPage();
 
+    // 设置一个真实的用户代理，防止因为默认的Headless UA被拦截
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+
     let url = `https://panel${panelnum}.serv00.com/login/?next=/`;
 
     try {
-      // 修改网址为新的登录页面
-      await page.goto(url);
-      await page.waitForSelector('#id_username');  // 等待用户名输入框加载
+      console.log(`正在登录账号: ${username} ...`);
+      
+      await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
+      
+      // 等待用户名输入框加载 (ID依然是 id_username)
+      await page.waitForSelector('#id_username');
 
       // 清空用户名输入框的原有值
       const usernameInput = await page.$('#id_username');
       if (usernameInput) {
-        await usernameInput.click({ clickCount: 3 }); // 选中输入框的内容
-        await usernameInput.press('Backspace'); // 删除原来的值
+        await usernameInput.click({ clickCount: 3 });
+        await usernameInput.press('Backspace');
       }
 
       // 输入实际的账号和密码
-      await page.type('#id_username', username);
-      await page.type('#id_password', password);
-
+      await page.type('#id_username', username, { delay: 50 });
+      await page.type('#id_password', password, { delay: 50 });
       // 提交登录表单
-      const loginButton = await page.$('#submit');
+      const submitSelector = 'button[type="submit"]';
+      const loginButton = await page.$(submitSelector);
+
       if (loginButton) {
-        await loginButton.click();
+        await Promise.all([
+          page.waitForNavigation(),
+          loginButton.click()
+        ]);
       } else {
-        throw new Error('无法找到登录按钮');
+        throw new Error('无法找到登录按钮 (button[type="submit"])');
       }
 
-      // 等待登录成功（如果有跳转页面的话）
-      await page.waitForNavigation();
-
-      // 判断是否登录成功
+      await Promise.all([
+        page.waitForNavigation({ waitUntil: 'domcontentloaded' }), // 等待页面跳转
+        page.click(submitSelector) // 点击登录按钮
+      ]);
       const isLoggedIn = await page.evaluate(() => {
-        const logoutButton = document.querySelector('a[href="/logout/"]');
-        return logoutButton !== null;
+        // 检查是否存在含有 logout 字样的链接
+        const logoutLinks = document.querySelector('a[href*="logout"]');
+        return logoutLinks !== null;
       });
 
       if (isLoggedIn) {
-        // 获取当前的UTC时间和北京时间
-        const nowUtc = formatToISO(new Date());// UTC时间
-        const nowBeijing = formatToISO(new Date(new Date().getTime() + 8 * 60 * 60 * 1000)); // 北京时间东8区，用算术来搞
-        console.log(`账号 ${username} 于北京时间 ${nowBeijing}（UTC时间 ${nowUtc}）登录成功！`);
+        const nowUtc = formatToISO(new Date());
+        const nowBeijing = formatToISO(new Date(new Date().getTime() + 8 * 60 * 60 * 1000));
+        console.log(`✅ 账号 ${username} 于北京时间 ${nowBeijing}（UTC时间 ${nowUtc}）登录成功！`);
       } else {
-        console.error(`账号 ${username} 登录失败，请检查账号和密码是否正确。`);
+        console.error(`❌ 账号 ${username} 登录失败，未能检测到登录后的状态。`);
       }
+
     } catch (error) {
-      console.error(`账号 ${username} 登录时出现错误: ${error}`);
+      console.error(`❌ 账号 ${username} 登录时出现错误: ${error.message}`);
     } finally {
-      // 关闭页面和浏览器
       await page.close();
       await browser.close();
 
-      // 用户之间添加随机延时
-      const delay = Math.floor(Math.random() * 8000) + 1000; // 随机延时1秒到8秒之间
+      const delay = Math.floor(Math.random() * 8000) + 1000; 
       await delayTime(delay);
     }
   }
