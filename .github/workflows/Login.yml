@@ -6,6 +6,9 @@ on:
   schedule:
     - cron: '41 9 */7 * *'
 
+permissions:
+  contents: write
+
 env:
   ACCOUNTS_JSON: ${{ secrets.ACCOUNTS_JSON }}
 
@@ -33,3 +36,7 @@ jobs:
           set -e  
           xvfb-run --server-args="-screen 0 1280x1024x24" node login.js
 
+      - name: Keep Workflow Alive
+        uses: gautamkrishnar/keepalive-workflow@v1
+        with:
+          use_api: true
